@@ -1,4 +1,4 @@
-all: memory df iftraff nproc loadavg nconn cpumhz ifpackets sendmail-mailq cpu
+all: memory df iftraff nproc loadavg nconn cpumhz ifpackets sendmail-mailq cpu nagios_check_rrd_last wireless-snr
 
 memory: memory.c udpsend.c
 	gcc -O2 -o memory memory.c udpsend.c
@@ -30,5 +30,11 @@ sendmail-mailq: sendmail-mailq.c udpsend.c
 cpu: cpu.c udpsend.c
 	gcc -O2 -o cpu cpu.c udpsend.c
 
+wireless-snr: wireless-snr.c udpsend.c
+	gcc -O2 -o wireless-snr wireless-snr.c udpsend.c
+
+nagios_check_rrd_last: nagios_check_rrd_last.c
+	gcc -O2 -lrrd -o nagios_check_rrd_last nagios_check_rrd_last.c
+
 clean:
-	rm -f memory df iftraff nproc loadavg nconn cpumhz ifpackets sendmail-mailq cpu
+	rm -f memory df iftraff nproc loadavg nconn cpumhz ifpackets sendmail-mailq cpu wireless-snr nagios_check_rrd_last
