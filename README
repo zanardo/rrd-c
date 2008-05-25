@@ -1,1 +1,177 @@
-For documentation, go to http://zanardo.org/rrd.html
+rrd
+
+  rrd is a BSD-like licensed collection of tools for Linux to obtain
+  statistical time-based data from computer devices on the network, writing
+  them in databases, and serving pretty graphs via browser. It is composed
+  by a passive udp-server collector written in C for pure speed,
+  scalability and low resources usage, and by a Perl CGI script with a
+  simple and scalable interface based on filters to show the graphs.
+
+  Uses for rrd include receiving statistical data and plotting graphs for
+  network traffic, disk usage, system temperatures, load averages, mail
+  queue sizes, spam statistics, and so on, for any number of machines or
+  devices inside a network, for centralized monitoring.
+
+  The system is entirely based on rrdtool, indeed, rrd is like a thin layer
+  that wraps the fantastic rrdtool software into a distributed network
+  statistical collection and display package.  It is done to be simple
+  (think about Unix simplicity!), and it has no fancy configuration wizard
+  or easy templates.  Instead, it is very bare-foot -- prior knowledge in
+  rrdtool is required, as you _will_ be barely using rrdtool commands and
+  arguments to create databases and graphs.
+
+  Attention: Although rrd daemon was designed to be secure (it runs under a
+  non-privileged user account and a chroot-jail), it is supposed to be run
+  inside a Local Area Network, so it has no authentication or encryption.
+  Data is send in plain text inside udp datagrams over the network.  rrd is
+  made to be simple. Use at your own risk!
+
+installing rrd
+
+  You can fetch the latest version of rrd at http://zanardo.org/rrd.tgz.
+  As root, execute the following steps:
+
+    # cd /opt
+    # tar xvvzf /path/to/downloaded/rrd.tgz
+
+  If you want to change the configuration (like the username that the rrd
+  daemon will run, the port it will listen, etc), edit config.h.
+
+  Compile the rrd daemon:
+
+    # make me
+
+  Compile the sample C collectors:
+
+    # cd collectors
+    # make clean &amp;&amp; make
+
+  Create configurations and data dir:
+
+    # mkdir -p conf-data conf-graph conf-graph-filters conf-graph-help data
+
+  Now copy the Perl CGI to you web server installation.  Note that it
+  should be configured to run cgi files.
+
+    # cd ..
+    # cp rrd.cgi /var/www/htdocs/
+
+  Define permissions:
+
+    # chown nobody ./data
+
+  Start rrd daemon:
+
+    # ./rrd
+
+  If you want to start rrd at system bootup, use this command in your
+  initialization scripts:
+
+    /opt/rrd/rrd 1>/dev/null 2>/dev/null
+
+example: creating a system load average graph for localhost
+
+  Prior knowledge in the rrdtool software is required to get your rrd
+  installation working. Read the rrdtool documentation.  The rrd
+  configuration is merely configuring the arguments that will be passed to
+  rrdcreate, rrdupdate and rrdgraph.  This bare user-interface comes with
+  great flexibility, as you can collect and display almost any type of
+  time-based information that you want, and create the graph the way you
+  want.
+
+  The configuration of rrdcreate, or how the information collected will be
+  stored, is done creating files in ./conf-data.  Create the file
+  ./conf-data/localhost-loadavg with the content below:
+
+    --step=60
+    DS:1m:GAUGE:120:0:U
+    DS:5m:GAUGE:120:0:U
+    DS:15m:GAUGE:120:0:U
+    RRA:AVERAGE:0.5:1:120
+    RRA:AVERAGE:0.5:5:288
+    RRA:AVERAGE:0.5:30:336
+    RRA:AVERAGE:0.5:120:360
+    RRA:AVERAGE:0.5:1440:360
+
+  To generate the .rrd file (the database for rrdtool), type:
+
+    # make
+
+  The file ./data/localhost-loadavg.rrd will be created.
+
+  To collect the information, you can use the collector
+  ./collectors/loadavg that comes bundled with rrd. Append this line in
+  crontab:
+
+    * * * * * /opt/rrd/collectors/loadavg 127.0.0.1:23456 localhost-loadavg 1>/dev/null 2>/dev/null
+
+  Now, at every minute, the Load Average will be collected and send by udp
+  to the rrd daemon. 
+
+  The graph configuration resides in ./conf-graph.  Graphs are distinct
+  entities from the database files created above. You can create a graph
+  and display information from various databases, for example. Now, create
+  the file ./conf-graph/localhost-loadavg and fill it with the data below:
+
+    --title=localhost: Load Average
+    DEF:m1m=localhost-loadavg.rrd:1m:AVERAGE
+    DEF:m5m=localhost-loadavg.rrd:5m:AVERAGE
+    DEF:m15m=localhost-loadavg.rrd:15m:AVERAGE
+    LINE1:m1m#0000FF:1 minutes average
+    LINE1:m5m#00FF00:5 minutes average
+    LINE1:m15m#FF0000:15 minutes average
+
+  Just point your browser to
+  http://localhost/rrd.cgi?action=list-graphs&amp;filters=all&amp;offset=86400
+  to view the graphs.
+
+how search and filters work
+
+  rrd web interface display graphs based on search criterias requested by
+  the user, or pre-defined filters configured in ./conf-graph-filters.  The
+  search and filters match the graph file name (under ./rrd-graph).  So,
+  you can standardize the graphs file names to organize your monitored
+  devices, like: servername-graphtype. In this way, you can filter/search
+  by servername, graphtype, etc.
+
+  Search uses Perl regular expressions. Example: ^servername-, eth0$.
+  Filters are simply saved searches. To create a filter to list all graphs
+  for servername, create the file ./conf-graph-filters/servername with the
+  content ^servername-. The filter servername will be listed on the web
+  interface.
+
+  By default, the filter all comes pre-installed, with the content .*, and
+  it lists all graphs.
+
+the rrd protocol
+
+  rrd only processes udp packets with rrdupdates, or time-based data to
+  update it's databases. Example for a typical packet content:
+
+    darkstar-iftraff-eth0 N:864703:6629
+
+  The first term, darkstar-iftraff-eth0, is the database name.  It must
+  have been previously created in ./conf-data/darkstar-iftraff-eth0 and the
+  command make executed, creating the database
+  ./data/darkstar-iftraff-eth0.rrd. In this example, we are collecting
+  network traffic in server darkstar, on the interface eth0.
+
+  The second term, N:864703:6629, is a rrdupdate argument.  Read the
+  rrdupdate documentation from rrdtool to understand it. The first number
+  is the RX (received) traffic and the second number is the TX
+  (transmitted) traffic, both measured in bytes and in absolute form.
+
+creating collectors
+
+  It's very easy to create collectors. Suppose we want to collect the
+  percentual of used space in the filesystem mounted as / on server hel.
+  Create the following bash shell-script:
+
+    used=$(df / | grep "/" | sed -e 's/^.* \([0-9]\+\)% .*$/\1/')
+    echo "hel-df-root N:$used" &gt; /dev/udp/192.168.1.10/23456
+
+  This sends the information to the rrd daemon on 192.168.1.10.
+
+  rrd comes with some collectors coded in C in ./collectors. You can create
+  collectors in any programming language you want. If you want to code in
+  C, you can use those collectors as your starting point.
