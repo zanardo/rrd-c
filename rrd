@@ -1,0 +1,52 @@
+#!/usr/bin/ruby
+
+RRDHOST = '0.0.0.0'
+RRDPORT = 23456
+RRDUSER = 'junior'
+RRDROOT = '/opt/rrd'
+RRDVERSION = '0.3'
+
+require 'etc'
+require 'socket'
+require 'RRD'
+
+puts 'starting rrd daemon'
+
+puts "chdir('#{RRDROOT}')"
+Dir.chdir(RRDROOT)
+
+if ENV['USER'] == 'root'
+	uid = Etc.getpwnam(RRDUSER).uid
+
+	puts "chroot('#{RRDROOT}')"
+	Dir.chroot('.')
+
+	puts "dropping privileges to #{RRDUSER}"
+	Process.uid = uid
+end
+
+puts "rrd version #{RRDVERSION} running"
+
+server = UDPSocket.new(:INET)
+server.bind(RRDHOST, RRDPORT)
+
+puts "listening on #{RRDHOST}:#{RRDPORT}"
+puts 'rrd daemon is ready to receive requests'
+
+while true
+
+	msg = server.recvfrom(1024)
+	msg[0].chomp!
+	puts "[#{msg[1][3]}] #{msg[0]}"
+
+	if msg[0] =~ /^([a-z0-9\-]+) (N:[0-9U\-\.\:]+)$/
+		begin
+			RRD.update("data/#{$1}.rrd", $2)
+		rescue
+			puts "error: #$!"
+		end
+	else
+		puts 'error: invalid packet'
+	end
+
+end
